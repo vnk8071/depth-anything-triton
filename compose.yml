@@ -1,18 +1,15 @@
 services:
   tritonserver:
-    image: nvcr.io/nvidia/tritonserver:24.01-py3
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['0']
-              capabilities: [gpu]
+    image: nvcr.io/nvidia/tritonserver:25.01-py3
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
     restart: always
-    command: ["tritonserver", "--model-repository=/models", "--strict-model-config=false", "--log-verbose=1"]
+    entrypoint: ["/bin/bash", "/workspace/entrypoint.sh"]
     ports:
       - "8000:8000"
       - "8001:8001"
       - "8002:8002"
     volumes:
-      - model_repository:/models
+      - ./model_repository:/models
+      - ./entrypoint.sh:/workspace/entrypoint.sh

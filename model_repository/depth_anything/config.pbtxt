@@ -16,13 +16,4 @@ output [
     dims: [ 1, 518, 518 ]
   }
 ]
-version_policy: { all { } }
-dynamic_batching { }
-instance_group [ { count: 2 }]
-optimization { execution_accelerators {
-  gpu_execution_accelerator : [ {
-    name : "tensorrt"
-    parameters { key: "precision_mode" value: "FP16" }
-    parameters { key: "max_workspace_size_bytes" value: "1073741824" }
-    }]
-}}
+instance_group [ { count: 1, kind: KIND_GPU }]

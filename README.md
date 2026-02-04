@@ -87,14 +87,48 @@ URL: `http://127.0.0.1:7860`
 
 ## Deploy on Triton Inference Server
 
-### Convert model to TensorRT plan and save it to the model repository
+### Quick Start (Recommended)
 
+The easiest way to deploy is using Docker Compose, which automatically converts the ONNX model to TensorRT on first startup:
+
+1. Download the pre-trained model and convert to ONNX:
 ```bash
-makedirs model_repository/depth_anything/1
-trtexec --onnx=models/depth_anything_v2_vits.onnx --saveEngine=model_repository/depth_anything/1/model.plan
+mkdir -p Depth-Anything-V2/checkpoints
+wget -O Depth-Anything-V2/checkpoints/depth_anything_v2_vits.pth \
+  "https://huggingface.co/depth-anything/Depth-Anything-V2-Small/resolve/main/depth_anything_v2_vits.pth"
+python export.py --encoder vits --input-size 518
 ```
 
-### Check I/O of model and create the model configuration
+2. Copy the ONNX model to the model repository:
+```bash
+cp models/depth_anything_v2_vits.onnx* model_repository/depth_anything/1/
+```
+
+3. Start the Triton server (auto-converts to TensorRT on first run):
+```bash
+docker compose up -d
+```
+
+4. Check the logs to monitor conversion progress:
+```bash
+docker compose logs -f
+```
+
+The server will be available at:
+- HTTP: `http://localhost:8000`
+- gRPC: `localhost:8001`
+- Metrics: `http://localhost:8002`
+
+### Manual Setup
+
+#### Convert model to TensorRT plan and save it to the model repository
+
+```bash
+mkdir -p model_repository/depth_anything/1
+trtexec --onnx=models/depth_anything_v2_vits.onnx --saveEngine=model_repository/depth_anything/1/model.plan --fp16
+```
+
+#### Check I/O of model and create the model configuration
 
 ```bash
 polygraphy inspect model model_repository/depth_anything/1/model.plan
@@ -122,31 +156,36 @@ output [
     dims: [ 1, 518, 518 ]
   }
 ]
+instance_group [ { count: 1, kind: KIND_GPU }]
 ```
 
-### Build and run the Triton Inference Server container
+#### Build and run the Triton Inference Server container
 
 - Edge devices with NVIDIA GPU
 
 ```bash
 sudo docker build -t tritonserver:v1 .
-sudo docker run --runtime=nvidia --gpus all -p 8000:8000 -p 8001:8001 -p 8002:8002
--v /home/nx-int/code/Depth-Anythingv2-TensorRT-python/model_repository:/models tritonserver:v1
+sudo docker run --runtime=nvidia --gpus all -p 8000:8000 -p 8001:8001 -p 8002:8002 \
+  -v $(pwd)/model_repository:/models tritonserver:v1
 ```
 
-- Server with NVIDIA GPU
+- Server with NVIDIA GPU (using Docker Compose)
 
 ```bash
-sudo docker compose up --build
+docker compose up -d
 ```
+
+The `compose.yml` uses `nvcr.io/nvidia/tritonserver:25.01-py3` which includes TensorRT 10.8 with support for newer GPUs (including RTX 40/50 series with Compute Capability 8.9+/12.0).
 
 ![deploy_triton](assets/deploy_triton.png)
 
 ### Inference
 
 ```bash
-python3 depth_anything_triton_infer.py --input-path assets/demo01.jpg
+python3 depth_anything_triton_infer.py --input_path assets/demo01.jpg --client_type http --model_name depth_anything
 ```
+
+Note: Update the `server_url` parameter in the script or class initialization to match your server address (default is `localhost`).
 
 ![inference_triton](assets/inference_triton.png)
 
@@ -154,9 +193,9 @@ python3 depth_anything_triton_infer.py --input-path assets/demo01.jpg
 
 Inside the container, run the following command to benchmark the model:
 ```bash
-perf_analyzer -m depth_anything --shape input:1,3,518,158 --percentile=95 --concurrency-range 1:4
+perf_analyzer -m depth_anything --shape input:1,3,518,518 --percentile=95 --concurrency-range 1:4
 
-or 
+# or for dynamic model
 perf_analyzer -m depth_anything_dynamic --shape input:480,960,3 --percentile=95 --concurrency-range 1:4
 ```
 
