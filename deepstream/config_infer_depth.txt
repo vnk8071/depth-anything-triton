@@ -1,0 +1,56 @@
+[property]
+gpu-id=0
+net-scale-factor=0.00392156862745098
+# 1/255 = 0.00392156862745098
+
+# Model files - use either ONNX or pre-converted TensorRT engine
+# Option 1: Use ONNX (will be converted to TensorRT on first run)
+# onnx-file=../models/depth_anything_v2_vits.onnx
+# Option 2: Use pre-converted TensorRT engine (faster startup)
+model-engine-file=../models/depth_anything_v2_vits.engine
+
+# Input preprocessing
+# ImageNet normalization: mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+# DeepStream applies: (pixel * net-scale-factor - offsets) / std
+# We need: (pixel/255 - mean) / std
+offsets=123.675;116.28;103.53
+# offsets = mean * 255 = [123.675, 116.28, 103.53]
+
+model-color-format=0
+# 0=RGB, 1=BGR, 2=GRAY
+
+# Network configuration
+network-mode=2
+# 0=FP32, 1=INT8, 2=FP16
+
+batch-size=1
+num-detected-classes=1
+interval=0
+gie-unique-id=1
+
+# Process full frame for depth estimation
+process-mode=1
+# 1=Primary (full frame), 2=Secondary (on detected objects)
+
+# Input dimensions (must match model export)
+infer-dims=3;518;518
+# channels;height;width
+
+# Maintain aspect ratio during resize
+maintain-aspect-ratio=1
+symmetric-padding=1
+
+# Output raw tensor for custom processing
+output-tensor-meta=1
+
+# Network type
+network-type=100
+# 0=Detector, 1=Classifier, 2=Segmentation, 3=Instance Segmentation, 100=Other
+
+# TensorRT workspace size (MB)
+workspace-size=2048
+
+# Clustering (not used for depth but required)
+[class-attrs-all]
+pre-cluster-threshold=0.0
+post-cluster-threshold=0.0

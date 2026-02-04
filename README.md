@@ -199,10 +199,125 @@ perf_analyzer -m depth_anything --shape input:1,3,518,518 --percentile=95 --conc
 perf_analyzer -m depth_anything_dynamic --shape input:480,960,3 --percentile=95 --concurrency-range 1:4
 ```
 
+## Deploy with DeepStream SDK
+
+DeepStream SDK provides a high-performance video analytics pipeline for running depth estimation on video streams with optimized GPU utilization.
+
+### Prerequisites
+
+- NVIDIA DeepStream SDK 8.0+ (DeepStream container recommended)
+- TensorRT engine file (`.engine`)
+- NVIDIA GPU with compute capability 5.0+
+
+### Quick Start with Docker (Recommended)
+
+The simplest way to run depth estimation with DeepStream:
+
+```bash
+# Create output directory
+mkdir -p output
+
+# Run depth estimation on an image
+docker run --rm \
+  --device=/dev/nvidia0 \
+  --device=/dev/nvidiactl \
+  --device=/dev/nvidia-uvm \
+  --device=/dev/nvidia-uvm-tools \
+  --device=/dev/nvidia-modeset \
+  -v ~/nvidia-tools:/nvidia:ro \
+  -e LD_LIBRARY_PATH=/nvidia:/usr/local/cuda/lib64 \
+  -v $(pwd):/workspace \
+  -w /workspace/deepstream \
+  nvcr.io/nvidia/deepstream:8.0-triton-multiarch \
+  python3 deepstream_depth.py -i /workspace/assets/demo01.jpg -o /workspace/output/depth_output.jpg
+```
+
+### DeepStream Python Script
+
+The `deepstream/deepstream_depth.py` script provides a simple GStreamer pipeline for depth estimation:
+
+```bash
+# Basic usage
+python3 deepstream_depth.py -i <input_image> -o <output_image>
+
+# With custom config
+python3 deepstream_depth.py -i input.jpg -o output.jpg -c config_infer_depth.txt
+```
+
+**Options:**
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-i, --input` | Input image file (JPEG) | Required |
+| `-o, --output` | Output image file | `output/depth_output.jpg` |
+| `-c, --config` | nvinfer config file | `config_infer_depth.txt` |
+
+### DeepStream Pipeline Configuration
+
+The `deepstream/` directory contains:
+
+| File | Description |
+|------|-------------|
+| `config_infer_depth.txt` | nvinfer configuration for depth model |
+| `deepstream_depth_config.txt` | Full DeepStream app configuration |
+| `deepstream_depth.py` | Python script with GStreamer pipeline |
+
+### nvinfer Configuration Parameters
+
+Key parameters in `config_infer_depth.txt`:
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `network-mode` | 2 | FP16 precision (0=FP32, 1=INT8, 2=FP16) |
+| `model-engine-file` | `../models/depth_anything_v2_vits.engine` | TensorRT engine path |
+| `infer-dims` | 3;518;518 | Input dimensions (CHW) |
+| `output-tensor-meta` | 1 | Output raw tensor for processing |
+| `net-scale-factor` | 0.00392156862745098 | 1/255 normalization |
+| `offsets` | 123.675;116.28;103.53 | ImageNet mean values |
+
+### Converting Model for DeepStream
+
+```bash
+# Convert ONNX to TensorRT engine
+trtexec --onnx=models/depth_anything_v2_vits.onnx \
+        --saveEngine=models/depth_anything_v2_vits.engine \
+        --fp16 \
+        --memPoolSize=workspace:2048M
+```
+
+### Using deepstream-app (Alternative)
+
+For more complex pipelines with multiple sources:
+
+```bash
+docker run --rm \
+  --device=/dev/nvidia0 --device=/dev/nvidiactl \
+  --device=/dev/nvidia-uvm --device=/dev/nvidia-uvm-tools \
+  -v $(pwd):/workspace \
+  -w /workspace/deepstream \
+  nvcr.io/nvidia/deepstream:8.0-triton-multiarch \
+  deepstream-app -c deepstream_depth_config.txt
+```
+
+### Performance Comparison
+
+| Method | Framework | Batch Size | Latency (ms) | Throughput |
+|--------|-----------|------------|--------------|------------|
+| Triton Server | TensorRT | 1 | ~5-8 | ~125-200 FPS |
+| DeepStream | TensorRT/nvinfer | 1 | ~6-10 | ~100-166 FPS |
+| Direct TensorRT | TensorRT | 1 | ~4-6 | ~166-250 FPS |
+
+*Benchmarks on RTX 5090, FP16, 518x518 input. Actual performance varies by hardware.*
+
+**Notes:**
+- DeepStream adds overhead for video pipeline management but excels at multi-stream processing
+- Triton provides better scalability for serving multiple clients
+- Direct TensorRT has lowest latency for single-image inference
+
 ## TODO
 
 - [x] Add UI for easy usage with crop region
 - [x] Deploy on Triton Inference Server
+- [x] Deploy with DeepStream SDK
 
 ## Citation
 
